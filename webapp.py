@@ -59,15 +59,11 @@ async def connect_device():
     else:
         global_connection['status'] = "Device not found."
 
-async def change_light(request):
-    
-    
-
+async def change_light(brightness, r, g, b):
     state = LightState()
     state.update(SwitchCommand(on=True))
     state.update(BrightnessCommand(brightness))
     state.update(RGBCommand(r, g, b))
-
     await global_connection['conn'].apply(state)
     
 
@@ -91,7 +87,7 @@ async def set_light():
         g = request.form.get('g', type=int)
         b = request.form.get('b', type=int)
         print(brightness, r, g, b)
-        # run_coroutine_threadsafe(change_light(request))
+        run_coroutine_threadsafe(change_light(brightness, r, g, b))
         flash('Light settings updated!', 'success')
     else:
         flash('No device connected.', 'error')

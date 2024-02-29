@@ -36,7 +36,7 @@ HTML = '''
 '''
 
 def run_coroutine_threadsafe(coroutine):
-    loop = asyncio.new_event_loop()
+    
     asyncio.set_event_loop(loop)
 
     def run():
@@ -106,4 +106,5 @@ async def turn_off():
     return redirect(url_for('home'))
 
 if __name__ == '__main__':
+    loop = asyncio.new_event_loop()
     app.run(debug=True, host='0.0.0.0', port=5002)

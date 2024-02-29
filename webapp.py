@@ -1,110 +1,76 @@
-from flask import Flask, request, render_template_string, redirect, url_for, flash
+from quart import Quart, request, render_template_string
 import asyncio
-from threading import Thread
 from bleak import BleakScanner
-from cheshire.compiler.state import LightState
-from cheshire.generic.command import BrightnessCommand, RGBCommand, SwitchCommand
 from cheshire.hal.devices import connect_to_ble_device
+from cheshire.compiler.state import LightState
+from cheshire.generic.command import BrightnessCommand, RGBCommand
 
-app = Flask(__name__)
-app.secret_key = 'your_secret_key'
+app = Quart(__name__)
 
-# Global variable to manage connection
-global_connection = {'conn': None, 'status': 'Disconnected'}
+# Store connections and last state globally; simplification for demonstration.
+connections = []
+last_state = {"brightness": 0, "r": 0, "g": 0, "b": 0}
 
-# Enhanced HTML with connection status and a connect button
-HTML = '''
-<!doctype html>
-<html>
-<head><title>Light Control</title></head>
-<body>
-  <h2>Control Lights</h2>
-  <p>Connection status: {{status}}</p>
-  <form action="/connect" method="post">
-    <input type="submit" value="Connect">
-  </form>
-  <form action="/set_light" method="post">
-    Brightness (0-255): <input type="number" name="brightness" min="0" max="255" value="255"><br>
-    R: <input type="number" name="r" min="0" max="255" value="255">
-    G: <input type="number" name="g" min="0" max="255" value="255">
-    B: <input type="number" name="b" min="0" max="255" value="255"><br>
-    <input type="submit" value="Apply">
-    <button formaction="/turn_off" formmethod="post">Turn Off</button>
-  </form>
-</body>
-</html>
-'''
+@app.route('/', methods=['GET', 'POST'])
+async def index():
+    if request.method == 'POST':
+        form = await request.form
+        if "set_color" in form:
+            r = int(form['r'])
+            g = int(form['g'])
+            b = int(form['b'])
+        elif "purple" in form:
+            r, g, b = 128, 0, 128  # RGB values for purple
+        brightness = int(form['brightness'])
+        last_state.update({"brightness": brightness, "r": r, "g": g, "b": b})
+        await update_device(brightness, r, g, b)
+        return await render_template_string(INDEX_HTML, **last_state, result="Settings Updated!")
+    return await render_template_string(INDEX_HTML, **last_state, result="")
 
-def run_coroutine_threadsafe(coroutine):
-    
-    asyncio.set_event_loop(loop)
-
-    def run():
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(coroutine)
-    thread = Thread(target=run)
-    thread.start()
-    thread.join()
-
-async def connect_device():
-    device = await BleakScanner.find_device_by_name(name='KS03~61385A')
-    if device:
-        conn = await connect_to_ble_device(device)
-        if conn:
-            print(f"Connected to {device.name}")
-            global_connection['conn'] = conn
-            global_connection['status'] = f"Connected to {device.name}"
-        else:
-            global_connection['status'] = "Failed to connect to the device."
-    else:
-        global_connection['status'] = "Device not found."
-
-async def change_light(brightness, r, g, b):
+async def update_device(brightness: int, r: int, g: int, b: int):
     state = LightState()
-    state.update(SwitchCommand(on=True))
     state.update(BrightnessCommand(brightness))
     state.update(RGBCommand(r, g, b))
-    await global_connection['conn'].apply(state)
-    
 
-@app.route('/')
-def home():
-    return render_template_string(HTML, status=global_connection['status'])
+    if not connections:
+        # Attempt to connect if not already connected
+        device = await BleakScanner.find_device_by_name(name='KS03~61385A')
+        if device:
+            connection = await connect_to_ble_device(device)
+            if connection:
+                print(f"Connected to {device.name}")
+                connections.append(connection)
 
-@app.route('/connect', methods=['POST'])
-def connect():
-    if global_connection['conn'] is None:
-        run_coroutine_threadsafe(connect_device())
-    else:
-        flash('Already connected to a device.', 'info')
-    return redirect(url_for('home'))
+    # Push light state to connected devices
+    for c in connections:
+        await c.apply(state)
 
-@app.route('/set_light', methods=['POST'])
-async def set_light():
-    if global_connection['conn']:
-        brightness = request.form.get('brightness', type=int)
-        r = request.form.get('r', type=int)
-        g = request.form.get('g', type=int)
-        b = request.form.get('b', type=int)
-        print(brightness, r, g, b)
-        run_coroutine_threadsafe(change_light(brightness, r, g, b))
-        flash('Light settings updated!', 'success')
-    else:
-        flash('No device connected.', 'error')
-    return redirect(url_for('home'))
-
-@app.route('/turn_off', methods=['POST'])
-async def turn_off():
-    if global_connection['conn']:
-        state = LightState()
-        state.update(SwitchCommand(on=False))
-
-        await global_connection['conn'].apply(state)
-        flash('Lights turned off!', 'success')
-    else:
-        flash('No device connected.', 'error')
-    return redirect(url_for('home'))
+INDEX_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BLE Light Control</title>
+</head>
+<body>
+    <h1>BLE Light Control</h1>
+    <form method="post">
+        <label for="brightness">Brightness:</label>
+        <input type="range" id="brightness" name="brightness" min="0" max="255" value="{{brightness}}">
+        <br>
+        <label for="r">Red:</label>
+        <input type="number" id="r" name="r" min="0" max="255" value="{{r}}">
+        <label for="g">Green:</label>
+        <input type="number" id="g" name="g" min="0" max="255" value="{{g}}">
+        <label for="b">Blue:</label>
+        <input type="number" id="b" name="b" min="0" max="255" value="{{b}}">
+        <br>
+        <input type="submit" name="set_color" value="Update Settings">
+        <button type="submit" name="purple" value="purple">Set Purple</button>
+    </form>
+    {{ result }}
+</body>
+</html>
+"""
 
 if __name__ == '__main__':
-    loop = asyncio.new_event_loop()
     app.run(debug=True, host='0.0.0.0', port=5002)

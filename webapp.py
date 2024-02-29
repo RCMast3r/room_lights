@@ -61,10 +61,7 @@ async def connect_device():
 
 async def change_light(request):
     
-    brightness = request.form.get('brightness', type=int)
-    r = request.form.get('r', type=int)
-    g = request.form.get('g', type=int)
-    b = request.form.get('b', type=int)
+    
 
     state = LightState()
     state.update(SwitchCommand(on=True))
@@ -89,7 +86,12 @@ def connect():
 @app.route('/set_light', methods=['POST'])
 async def set_light():
     if global_connection['conn']:
-        run_coroutine_threadsafe(change_light(request))
+        brightness = request.form.get('brightness', type=int)
+        r = request.form.get('r', type=int)
+        g = request.form.get('g', type=int)
+        b = request.form.get('b', type=int)
+        print(brightness, r, g, b)
+        # run_coroutine_threadsafe(change_light(request))
         flash('Light settings updated!', 'success')
     else:
         flash('No device connected.', 'error')

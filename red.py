@@ -24,7 +24,7 @@ async def main():
     # Update desired light state
     state = LightState()
     # state.update(SwitchCommand(on=True))
-    state.update(BrightnessCommand(0x23))
+    state.update(BrightnessCommand(255))
     state.update(RGBCommand(0xff, 0x00, 0x00))
     # state.update(EffectCommand(Effect.JUMP_7))
 

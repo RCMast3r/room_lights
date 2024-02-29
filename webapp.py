@@ -59,6 +59,21 @@ async def connect_device():
     else:
         global_connection['status'] = "Device not found."
 
+async def change_light(request):
+    
+    brightness = request.form.get('brightness', type=int)
+    r = request.form.get('r', type=int)
+    g = request.form.get('g', type=int)
+    b = request.form.get('b', type=int)
+
+    state = LightState()
+    state.update(SwitchCommand(on=True))
+    state.update(BrightnessCommand(brightness))
+    state.update(RGBCommand(r, g, b))
+
+    await global_connection['conn'].apply(state)
+    
+
 @app.route('/')
 def home():
     return render_template_string(HTML, status=global_connection['status'])
@@ -74,17 +89,7 @@ def connect():
 @app.route('/set_light', methods=['POST'])
 async def set_light():
     if global_connection['conn']:
-        brightness = request.form.get('brightness', type=int)
-        r = request.form.get('r', type=int)
-        g = request.form.get('g', type=int)
-        b = request.form.get('b', type=int)
-
-        state = LightState()
-        state.update(SwitchCommand(on=True))
-        state.update(BrightnessCommand(brightness))
-        state.update(RGBCommand(r, g, b))
-
-        await global_connection['conn'].apply(state)
+        run_coroutine_threadsafe(change_light(request))
         flash('Light settings updated!', 'success')
     else:
         flash('No device connected.', 'error')
@@ -103,4 +108,4 @@ async def turn_off():
     return redirect(url_for('home'))
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=True, host='0.0.0.0', port=5002)
